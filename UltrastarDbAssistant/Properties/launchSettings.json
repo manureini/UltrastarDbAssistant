@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "UltrastarDbAssistant": {
-      "commandName": "Project",
-      "commandLineArgs": "42"
-    }
-  }
-}

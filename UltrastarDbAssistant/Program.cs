@@ -16,6 +16,9 @@ namespace UltrastarDbAssistant
         private const string FFMPEG_EXE = "ffmpeg.exe";
         private const string FFMPEG_DOWNLOAD_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
 
+        private const string DOWNLOADED_SONGS_FILE = "downloaded_songs.txt";
+        private const string DOWNLOAD_FAILED_SONGS_FILE = "download_failed_songs.txt";
+
         private const string YOUTUBE_VIDEO_URL_PREFIX = "https://www.youtube.com/watch?v=";
 
         static async Task Main(string[] args)
@@ -30,13 +33,66 @@ namespace UltrastarDbAssistant
                 await DownloadFfmpegAsync();
             }
 
-            int songId = int.Parse(args[0]);
-
-            await DownloadSong(songId);
+            if (args[0] == "all")
+            {
+                await DownloadAll();
+            }
+            else
+            {
+                int songId = int.Parse(args[0]);
+                await DownloadSong(songId);
+            }
 
             Directory.Delete(TMP_DIR, true);
 
             Console.WriteLine("Finished processing");
+        }
+
+        private static async Task DownloadAll()
+        {
+            var downloadedSongs = new HashSet<int>();
+
+            if (File.Exists(DOWNLOADED_SONGS_FILE))
+            {
+                var filecontent = File.ReadAllText(DOWNLOADED_SONGS_FILE);
+                downloadedSongs = JsonSerializer.Deserialize<HashSet<int>>(filecontent)!;
+            }
+
+            var downloadFailedSongs = new HashSet<int>();
+
+            if (File.Exists(DOWNLOAD_FAILED_SONGS_FILE))
+            {
+                var filecontent = File.ReadAllText(DOWNLOAD_FAILED_SONGS_FILE);
+                downloadFailedSongs = JsonSerializer.Deserialize<HashSet<int>>(filecontent)!;
+            }
+
+            for (int i = 1; i < int.MaxValue; i++)
+            {
+                if (downloadedSongs.Contains(i) || downloadFailedSongs.Contains(i))
+                {
+                    continue;
+                }
+
+                Console.WriteLine("Download song: " + i);
+
+                try
+                {
+                    await DownloadSong(i);
+                    downloadedSongs.Add(i);
+
+                    var json = JsonSerializer.Serialize(downloadedSongs);
+                    File.WriteAllText(DOWNLOADED_SONGS_FILE, json);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.ToString());
+
+                    downloadFailedSongs.Add(i);
+
+                    var json = JsonSerializer.Serialize(downloadFailedSongs);
+                    File.WriteAllText(DOWNLOAD_FAILED_SONGS_FILE, json);
+                }
+            }
         }
 
         private static async Task DownloadSong(int pSongId)
@@ -55,13 +111,13 @@ namespace UltrastarDbAssistant
             string artist = content.Substring(content.IndexOf("#ARTIST") + 8, content.IndexOf("#", content.IndexOf("#ARTIST") + 1) - (content.IndexOf("#ARTIST") + 8)).Trim();
             string title = content.Substring(content.IndexOf("#TITLE") + 7, content.IndexOf("#", content.IndexOf("#TITLE") + 1) - (content.IndexOf("#TITLE") + 7)).Trim();
 
-            var artistTitle = artist + " - " + title;
+            var artistTitle = removeIllegalChars(artist + " - " + title);
 
             var songDir = Path.Combine(TMP_DIR, artistTitle);
 
             Directory.CreateDirectory(songDir);
 
-            var contentFileName = removeIllegalChars(artistTitle + ".txt");
+            var contentFileName = artistTitle + ".txt";
             var coverFileName = artistTitle + Path.GetExtension(cover);
 
             content = content.Replace("#COVER: ", "#COVER:" + coverFileName);
